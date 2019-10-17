@@ -4,18 +4,24 @@ import os
 import datetime
 import numpy as np
 from collections import deque
+from abc import ABCMeta, abstractmethod
 #keras.backend.set_floatx('float64')
-class Model(object):
-    def __init__(self, observation_dim, actions, i):
-        tf.random.set_seed(i)
+
+class AbstractModel(metaclass=ABCMeta):
+    def __init__(self, observation_dim, actions, n_chars, name, batch_size, shuffle, char_ix):
+        tf.random.set_seed(42)
         self.actions = actions
-        self.model_path = f'./model/char_{i}'
+        self.batch_size = batch_size
+        self.shuffle = shuffle
+        self.model_path = f'./model/char_{name}'
+        self.model_name = f'{n_chars}_model.hdf5'
+        self.full_model_path = f'{self.model_path}/{self.model_name}'
         if not os.path.exists(self.model_path):
-            os.mkdir(self.model_path)
-        if tf.saved_model.contains_saved_model(self.model_path):
+            os.makedirs(self.model_path)
+        if os.path.exists(self.full_model_path):
             print("loading previous weights")
             self.model = tf.keras.models.load_model(
-                self.model_path,
+                self.full_model_path,
             )
         else:
             print('Training from scratch')
@@ -23,7 +29,7 @@ class Model(object):
 
         self.epoch = 0
         current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-        train_log_dir = f'logs/gradient_tape/{current_time}/char_{i}'
+        train_log_dir = f'logs/gradient_tape/{current_time}/char_{name}_{n_chars}_{char_ix}'
         self.train_summary_writer = tf.summary.create_file_writer(train_log_dir)
         self.exploration = 1
         self.gamma = 0.99
@@ -34,62 +40,40 @@ class Model(object):
         self.cause_losses = deque(maxlen=100)
         self.running_reward = None
 
-    def _model_arch(self, observation_dim, actions_dim):
-        input_layer = keras.layers.Input(shape=(observation_dim,))
-        #x = keras.layers.BatchNormalization()(input_layer)
-        x = keras.layers.Dense(200, activation='relu',
-                               kernel_initializer='glorot_uniform')(input_layer)
-        output_layer = keras.layers.Dense(
-            actions_dim, activation='softmax', kernel_initializer='RandomNormal')(x)
-        return keras.models.Model(input_layer, output_layer)
+    @abstractmethod
+    def _model_arch(self):
+        pass
 
-    def train_loop(self, x, y, sample_weights, running_reward, exploration, cause_wins, cause_losses, steps):
-        train_dataset = tf.data.Dataset.from_tensor_slices(
-            (x, y, sample_weights))
-        train_dataset = train_dataset.shuffle(60000).batch(32)
-        loss_object = tf.keras.losses.CategoricalCrossentropy()
-        optimizer = tf.keras.optimizers.Adam()
+    @abstractmethod
+    def end_game(self):
+        pass
 
-        train_loss = tf.keras.metrics.Mean('train_loss', dtype=tf.float32)
-        train_accuracy = tf.keras.metrics.CategoricalAccuracy('train_accuracy')
-
-        def train_step(model, optimizer, x_train, y_train, sample_weight):
-            with tf.GradientTape() as tape:
-                predictions = model(x_train, training=True)
-                loss = loss_object(y_train, predictions, sample_weight)
-                log_loss = loss_object(y_train, predictions)
-            grads = tape.gradient(loss, model.trainable_variables)
-            optimizer.apply_gradients(zip(grads, model.trainable_variables))
-
-            train_loss(log_loss)
-            train_accuracy(y_train, predictions)
-
-        for (x_train, y_train, sample_weight) in train_dataset:
-            train_step(self.model, optimizer, x_train, y_train, sample_weight)
-
+    def train_loop(self, sample_weights, cause_wins, cause_losses, steps):
+        history = self.model.fit(
+            np.array(self.memory['x']), np.array(self.memory['y']),
+            sample_weight=np.array(sample_weights),
+            epochs=1,
+            batch_size=self.batch_size,
+            shuffle=self.shuffle,
+            verbose=0
+        )
         with self.train_summary_writer.as_default():
-            tf.summary.scalar('loss', train_loss.result(), step=self.epoch)
-            tf.summary.scalar(
-                'accuracy', train_accuracy.result(), step=self.epoch)
+            for key, items in history.history.items():
+                tf.summary.scalar(key, items[-1], step=self.epoch)
             tf.summary.scalar('running_reward',
-                              running_reward, step=self.epoch)
-            tf.summary.scalar('exploration', exploration, step=self.epoch)
+                              self.running_reward, step=self.epoch)
+            tf.summary.scalar('exploration', self.exploration, step=self.epoch)
             tf.summary.scalar('cause_wins', cause_wins, step=self.epoch)
             tf.summary.scalar('cause_losses', cause_losses, step=self.epoch)
-            tf.summary.scalar('steps', steps, step=self.epoch)
-
-        # Reset metrics every epoch
-        train_loss.reset_states()
-        train_accuracy.reset_states()
+            tf.summary.scalar('steps', len(self.memory['x']), step=self.epoch)
+        self.end_game()
         self.epoch += 1
 
+
     def save_model(self):
-        tf.keras.models.save_model(
-            self.model,
-            self.model_path,
-            overwrite=True,
-        )
-        # tf.saved_model.save(self.model, self.model_path)
+        self.model.save(self.full_model_path)
+
+
     def replace_model(self, model):
         self.model = model
 
@@ -121,13 +105,9 @@ class Model(object):
             self.memory['reward_sum'] += reward
         self.running_reward = self.get_running_reward()
         self.train_loop(
-            x=self.memory['x'],
-            y=self.memory['y'],
             sample_weights=self.discount_rewards(self.memory['reward'], self.gamma),
-            running_reward=self.running_reward,
-            exploration=self.exploration,
             cause_wins=np.mean(self.cause_wins),
-            cause_losses=np.mean(self.cause_wins),
+            cause_losses=np.mean(self.cause_losses),
             steps=len(self.memory['x'])
         )
         self.exploration = max(
@@ -166,6 +146,7 @@ class Model(object):
             'reward_sum': 0
         }
     # Karpathy (cf. https://gist.github.com/karpathy/a4166c7fe253700972fcbc77e4ea32c5)
+
     def discount_rewards(self, r, gamma):
         r = np.array(r)
         discounted_r = np.zeros_like(r)
@@ -182,3 +163,41 @@ class Model(object):
         discounted_r -= np.mean(discounted_r)  # normalizing the result
         discounted_r /= np.std(discounted_r)  # idem
         return discounted_r
+
+
+class MLPModel(AbstractModel):
+    def __init__(self, observation_dim, actions, n_chars, char_ix=0):
+        super().__init__(observation_dim, actions, n_chars, 'mlp', 32, True, char_ix)
+
+    def _model_arch(self, observation_dim, actions_dim):
+        input_layer = keras.layers.Input(shape=(observation_dim,))
+        #x = keras.layers.BatchNormalization()(input_layer)
+        x = keras.layers.Dense(200, activation='relu',
+                               kernel_initializer='glorot_uniform')(input_layer)
+        output_layer = keras.layers.Dense(
+            actions_dim, activation='softmax', kernel_initializer='RandomNormal')(x)
+        model = keras.models.Model(input_layer, output_layer)
+        model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
+        return model
+
+    def end_game(self):
+        pass
+
+class LSTMModel(AbstractModel):
+    def __init__(self, observation_dim, actions, n_chars, char_ix=0):
+        super().__init__(observation_dim, actions, n_chars, 'lstm', 1, False, char_ix)
+
+    def _model_arch(self, observation_dim, actions_dim):
+        input_layer = keras.layers.Input(shape=(observation_dim,), batch_size=1)
+        #x = keras.layers.BatchNormalization()(input_layer)
+        x = keras.layers.RepeatVector(1)(input_layer)
+        x = keras.layers.LSTM(200, kernel_initializer='glorot_uniform', stateful=True)(x)
+        output_layer = keras.layers.Dense(
+            actions_dim, activation='softmax', kernel_initializer='RandomNormal')(x)
+        model = keras.models.Model(input_layer, output_layer)
+        optimizer = keras.optimizers.RMSprop(clipvalue=5)
+        model.compile(optimizer=optimizer, loss='categorical_crossentropy', metrics=['accuracy'])
+        return model
+
+    def end_game(self):
+        self.model.reset_states()

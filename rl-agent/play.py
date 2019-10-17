@@ -1,14 +1,14 @@
 import gym
 import gym_fighters
 import numpy as np
-from model import Model
+from model import LSTMModel, MLPModel
 import time
 
-def main(n_chars=2, n_rays=16):
+def main(model, chars_trained_on, n_chars=2, n_rays=16):
     chars = range(n_chars)
     env = gym.make('fighters-v0', num_chars=n_chars, n_rays=n_rays)
     models = [
-        Model(env.observations_dim, env.action_choices, 1)
+        model(env.observations_dim, env.action_choices, chars_trained_on)
         for i in range(n_chars)
     ]
     while True:
@@ -22,6 +22,7 @@ def main(n_chars=2, n_rays=16):
                 new_state, _, done, _ = env.step(action, char_ix)
                 state = new_state
                 if done:
+                    model.end_game()
                     break
 
             print(done)
@@ -29,4 +30,5 @@ def main(n_chars=2, n_rays=16):
 
 
 if __name__ == "__main__":
-    main()
+    main(LSTMModel, 3)
+    main(MLPModel, 3)

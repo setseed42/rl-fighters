@@ -1,6 +1,6 @@
 import numpy as np
 import gym
-from model import Model
+from model import MLPModel, LSTMModel
 import gym_fighters
 import time
 
@@ -45,11 +45,11 @@ def get_mean_cause_loss(models):
         for model in models
     ])
 
-def main(gamma=0.99, n_chars=2, n_rays=16):
+def main(model, gamma=0.99, n_chars=2, n_rays=16):
     env = gym.make('fighters-v0', num_chars=n_chars, n_rays=n_rays)
     episode_nb = 1
     models = [
-        Model(env.observations_dim, env.action_choices, i)
+        model(env.observations_dim, env.action_choices, n_chars, i)
         for i in range(n_chars)
     ]
     epochs_before_saving = 100
@@ -57,22 +57,16 @@ def main(gamma=0.99, n_chars=2, n_rays=16):
         if episode_nb % epochs_before_saving == 0:
             models = play_game(env, models, render=True)
             print(f'Game {episode_nb} done')
-            for model in models:
-                model.save_model()
+            models[0].save_model()
         else:
             models = play_game(env, models, render=False)
         episode_nb += 1
-        # if episode_nb % 10**3 == 0:
-        #     print('Generation!')
-        #     good_model = np.argmax(running_reward)
-        #     bad_model = np.argmin(running_reward)
-        #     models[bad_model].replace_model(models[good_model].model)
 
     print('Finished!')
-    for model in models:
-        model.save_model()
+    model[0].save_model()
 
 
 if __name__ == "__main__":
     np.random.seed(42)
-    main()
+    main(MLPModel, n_chars=3, n_rays=16)
+    main(LSTMModel, n_chars=3, n_rays=16)
