@@ -1,8 +1,8 @@
 import gym
 import gym_fighters
-import numpy as np
 from model import LSTMModel, MLPModel
 import time
+
 
 def main(model, chars_trained_on, n_chars=2, n_rays=16):
     chars = range(n_chars)
@@ -13,22 +13,23 @@ def main(model, chars_trained_on, n_chars=2, n_rays=16):
     ]
     while True:
         state = env.reset()
-        done=False
+        done = False
         while not done:
             for char_ix in chars:
                 env.render()
                 time.sleep(.01)
-                action = models[char_ix].predict(state[char_ix, :], explore=False)
+                action = models[char_ix].predict(
+                    state[char_ix, :], explore=False)
                 new_state, _, done, _ = env.step(action, char_ix)
                 state = new_state
                 if done:
-                    model.end_game()
+                    for model in models:
+                        model.end_game()
                     break
 
-            print(done)
-            #state = new_state
+            # state = new_state
 
 
 if __name__ == "__main__":
-    main(LSTMModel, 3)
     main(MLPModel, 3)
+    main(LSTMModel, 3)
