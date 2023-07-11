@@ -6,5 +6,5 @@ setup(name='gym_fighters',
       #packages=['mypkg'],
       #package_dir={'mypkg': 'src/mypkg'},
       package_data={'gym_fighters': ['gym_fighters/envs/*.png']},
-      install_requires=['gym', 'numpy', 'pyglet']#And any other dependencies required
+      install_requires=['gym==0.15.3', 'numpy', 'pyglet==1.3.2']#And any other dependencies required
 )
