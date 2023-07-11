@@ -1,11 +1,7 @@
 import gym
-from gym import error, spaces, utils
-from gym.utils import seeding
 import numpy as np
 import pyglet
 from pyglet.window import key
-import os
-import pkg_resources
 from gym_fighters.envs.character import Character
 from gym_fighters.envs.game_env import GameEnv
 
@@ -121,7 +117,7 @@ class FightersEnv(gym.Env):
             batch[1].append(sprite)
 
 
-    def _get_other_chars(self, index):
+    def _get_other_chars(self, index: int) -> np.ndarray:
         other_chars = np.arange(self.num_chars)
         return other_chars[other_chars != index]
 

@@ -1,15 +1,17 @@
 import numpy as np
 import gym
 from model import MLPModel, LSTMModel
-import gym_fighters
 import time
+import gym_fighters
+
 
 def replace_models_with_model(i, models):
     model = models[i]
     for (j, other_model) in enumerate(models):
-        if j!=i:
+        if j != i:
             other_model.replace_model(model.model)
     return models
+
 
 def play_game(env, models, render=False):
     steps = 0
@@ -26,7 +28,8 @@ def play_game(env, models, render=False):
                 time.sleep(.01)
             action = models[char_ix].predict(state[char_ix, :])
             new_state, reward, done, _ = env.step(action, char_ix)
-            models[char_ix].add_to_memory(state[char_ix, :], action, reward[char_ix])
+            models[char_ix].add_to_memory(
+                state[char_ix, :], action, reward[char_ix])
             state = new_state
             steps += 1
             if done:
@@ -35,9 +38,11 @@ def play_game(env, models, render=False):
                 reward = models[char_ix].train(last=True)
                 models = replace_models_with_model(char_ix, models)
                 for other_char_ix in other_char_ixes:
-                    models[other_char_ix].train(last=False, others_reward=reward)
+                    models[other_char_ix].train(
+                        last=False, others_reward=reward)
                     models = replace_models_with_model(other_char_ix, models)
                 return models
+
 
 def get_mean_cause_loss(models):
     return np.array([
@@ -45,7 +50,8 @@ def get_mean_cause_loss(models):
         for model in models
     ])
 
-def main(model, gamma=0.99, n_chars=2, n_rays=16):
+
+def main(model, n_chars=2, n_rays=16):
     env = gym.make('fighters-v0', num_chars=n_chars, n_rays=n_rays)
     episode_nb = 1
     models = [
@@ -68,5 +74,5 @@ def main(model, gamma=0.99, n_chars=2, n_rays=16):
 
 if __name__ == "__main__":
     np.random.seed(42)
-    main(MLPModel, n_chars=3, n_rays=16)
-    main(LSTMModel, n_chars=3, n_rays=16)
+    #main(MLPModel, n_chars=2, n_rays=16)
+    main(LSTMModel, n_chars=2, n_rays=16)

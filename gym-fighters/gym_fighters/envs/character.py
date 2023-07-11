@@ -4,7 +4,7 @@ from pyglet.window import key
 
 
 class Character(GameEnv):
-    def __init__(self, char_index, game_env, other_chars, n_rays):
+    def __init__(self, char_index: int, game_env: GameEnv, other_chars: np.ndarray, n_rays: int):
         self.char_index = char_index
         self.state = game_env.state
         self.char_width = game_env.char_width
@@ -120,7 +120,7 @@ class Character(GameEnv):
             ## Returns distance to collision and what it collides with.
             ## Wall = 0 and Character = 1
             angle = ray_ix * np.pi * 2 / n_rays
-            ray_dist = 0.1
+            #ray_dist = 0.1
             d = np.array([
                 ray_dist*np.cos(angle),
                 ray_dist*np.sin(angle)

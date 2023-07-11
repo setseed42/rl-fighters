@@ -5,7 +5,8 @@ import datetime
 import numpy as np
 from collections import deque
 from abc import ABCMeta, abstractmethod
-#keras.backend.set_floatx('float64')
+# keras.backend.set_floatx('float64')
+
 
 class AbstractModel(metaclass=ABCMeta):
     def __init__(self, observation_dim, actions, n_chars, name, batch_size, shuffle, char_ix):
@@ -30,7 +31,8 @@ class AbstractModel(metaclass=ABCMeta):
         self.epoch = 0
         current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
         train_log_dir = f'logs/gradient_tape/{current_time}/char_{name}_{n_chars}_{char_ix}'
-        self.train_summary_writer = tf.summary.create_file_writer(train_log_dir)
+        self.train_summary_writer = tf.summary.create_file_writer(
+            train_log_dir)
         self.exploration = 1
         self.gamma = 0.99
         self.reset_memory()
@@ -51,7 +53,7 @@ class AbstractModel(metaclass=ABCMeta):
     def train_loop(self, sample_weights, cause_wins, cause_losses, steps):
         history = self.model.fit(
             np.array(self.memory['x']), np.array(self.memory['y']),
-            sample_weight=np.array(sample_weights),
+            sample_weight=np.array(sample_weights) if len(sample_weights)>1 else None,
             epochs=1,
             batch_size=self.batch_size,
             shuffle=self.shuffle,
@@ -69,14 +71,11 @@ class AbstractModel(metaclass=ABCMeta):
         self.end_game()
         self.epoch += 1
 
-
     def save_model(self):
         self.model.save(self.full_model_path)
 
-
     def replace_model(self, model):
         self.model = model
-
 
     def get_running_reward(self):
         if self.running_reward is None:
@@ -87,13 +86,13 @@ class AbstractModel(metaclass=ABCMeta):
     def train(self, last, others_reward=None):
         if last:
             if self.memory['reward_sum'] == 1:
-                #Means character killed other player
+                # Means character killed other player
                 self.memory['reward'][-1] *= 1
-                #maybe scale up reward sum as well
+                # maybe scale up reward sum as well
                 self.cause_wins.append(1)
                 self.cause_losses.append(0)
             if self.memory['reward_sum'] == -1:
-                #Means character hit wall
+                # Means character hit wall
                 self.cause_losses.append(1)
                 self.cause_wins.append(0)
             reward = self.memory['reward'][-1]
@@ -105,7 +104,8 @@ class AbstractModel(metaclass=ABCMeta):
             self.memory['reward_sum'] += reward
         self.running_reward = self.get_running_reward()
         self.train_loop(
-            sample_weights=self.discount_rewards(self.memory['reward'], self.gamma),
+            sample_weights=self.discount_rewards(
+                self.memory['reward'], self.gamma),
             cause_wins=np.mean(self.cause_wins),
             cause_losses=np.mean(self.cause_losses),
             steps=len(self.memory['x'])
@@ -127,7 +127,7 @@ class AbstractModel(metaclass=ABCMeta):
         if p_exp < exploration:
             return np.random.choice(self.actions, 1)[0]
         else:
-            action_proba = self.model.predict(x)[0]
+            action_proba = self.model.predict(x, verbose=0)[0]
             return np.random.choice(self.actions, 1, p=action_proba)[0]
 
     def add_to_memory(self, x, y, reward):
@@ -166,37 +166,42 @@ class AbstractModel(metaclass=ABCMeta):
 
 
 class MLPModel(AbstractModel):
-    def __init__(self, observation_dim, actions, n_chars, char_ix=0):
+    def __init__(self, observation_dim: int, actions: np.ndarray, n_chars: int, char_ix=0):
         super().__init__(observation_dim, actions, n_chars, 'mlp', 32, True, char_ix)
 
-    def _model_arch(self, observation_dim, actions_dim):
+    def _model_arch(self, observation_dim: int, actions_dim: int):
         input_layer = keras.layers.Input(shape=(observation_dim,))
-        #x = keras.layers.BatchNormalization()(input_layer)
+        # x = keras.layers.BatchNormalization()(input_layer)
         x = keras.layers.Dense(200, activation='relu',
                                kernel_initializer='glorot_uniform')(input_layer)
         output_layer = keras.layers.Dense(
             actions_dim, activation='softmax', kernel_initializer='RandomNormal')(x)
         model = keras.models.Model(input_layer, output_layer)
-        model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
+        model.compile(optimizer='adam',
+                      loss='categorical_crossentropy', metrics=['accuracy'])
         return model
 
     def end_game(self):
         pass
+
 
 class LSTMModel(AbstractModel):
     def __init__(self, observation_dim, actions, n_chars, char_ix=0):
         super().__init__(observation_dim, actions, n_chars, 'lstm', 1, False, char_ix)
 
     def _model_arch(self, observation_dim, actions_dim):
-        input_layer = keras.layers.Input(shape=(observation_dim,), batch_size=1)
-        #x = keras.layers.BatchNormalization()(input_layer)
-        x = keras.layers.RepeatVector(1)(input_layer)
-        x = keras.layers.LSTM(200, kernel_initializer='glorot_uniform', stateful=True)(x)
+        input_layer = keras.layers.Input(
+            shape=(observation_dim,), batch_size=1)
+        x = keras.layers.BatchNormalization()(input_layer)
+        x = keras.layers.RepeatVector(1)(x)
+        x = keras.layers.LSTM(
+            200, kernel_initializer='glorot_uniform', stateful=True)(x)
         output_layer = keras.layers.Dense(
             actions_dim, activation='softmax', kernel_initializer='RandomNormal')(x)
         model = keras.models.Model(input_layer, output_layer)
         optimizer = keras.optimizers.RMSprop(clipvalue=5)
-        model.compile(optimizer=optimizer, loss='categorical_crossentropy', metrics=['accuracy'])
+        model.compile(optimizer=optimizer,
+                      loss='categorical_crossentropy', metrics=['accuracy'])
         return model
 
     def end_game(self):

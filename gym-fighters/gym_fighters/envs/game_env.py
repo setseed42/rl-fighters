@@ -5,10 +5,10 @@ from pyglet.window import key
 import pkg_resources
 
 class GameEnv(object):
-    def __init__(self, num_chars):
-        self.num_chars = num_chars
-        self.window_width = 300
-        self.window_height = 400
+    def __init__(self, num_chars: int):
+        self.num_chars: int = num_chars
+        self.window_width: int = 300
+        self.window_height: int = 400
         self.state = None
         self.image_map = self._get_art()
         self.char_width = self.image_map['standing_up'].width
@@ -45,6 +45,7 @@ class GameEnv(object):
     def _get_art(self):
         DATA_PATH = pkg_resources.resource_filename(
             'gym_fighters', 'envs/assets')
+        print(DATA_PATH)
         imgs = os.listdir(DATA_PATH)
         loader = pyglet.resource.Loader([DATA_PATH])
 
@@ -54,8 +55,9 @@ class GameEnv(object):
                 .replace('.png', '')
 
         def get_image_resource(img):
-            path = f'{img}'
-            char_resource = loader.image(path)
+            path = f'{DATA_PATH}/{img}'
+            #char_resource = loader.image(path)
+            char_resource = pyglet.image.load(path)
             char_resource.anchor_x = char_resource.width // 2
             char_resource.anchor_y = char_resource.height // 2
             return char_resource
