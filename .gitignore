@@ -123,5 +123,5 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
-rl-agent/logs
+logs
 .vscode
